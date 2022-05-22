@@ -29,7 +29,10 @@ module Matrix_controller_tf;
 	reg [95:0] x;
 
 	// Instantiate the Unit Under Test (UUT)
-	Matrix_controller uut (
+	Matrix_controller
+#(
+	.J_MAX(3)
+)	uut (
 		.clock(clock),
 		.x(x)
 	);

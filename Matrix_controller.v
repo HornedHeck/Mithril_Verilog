@@ -24,7 +24,8 @@ module Matrix_controller
 		parameter I_SIZE = 0,
 		parameter J_SIZE = 2,
 		parameter X_ENC_SIZE = 3,
-	
+		parameter J_MAX = 2 ** J_SIZE - 1,
+
 		// x_enc params
 		parameter SPLIT_LIST_SIZE = 1,
 		parameter TOTAL_SPLITS = 2 ** X_ENC_SIZE - 1,
@@ -34,7 +35,7 @@ module Matrix_controller
 		parameter BRAM_COUNT = 2,
 		parameter BRAM_COUNT_SIZE = 1,
 		parameter RAM_WIDTH = 8,
-		parameter ADDR_SIZE = 4, 
+		parameter ADDR_SIZE = 4,
 		
 		// dist calc params
 		parameter LUTS_PER_CLOCK_SIZE = 0,
@@ -49,7 +50,8 @@ module Matrix_controller
 		parameter LOG = 1
 )(
 	input clock,
-	input [DTYPE_SIZE * X_ENC_SIZE - 1:0] x
+	input [DTYPE_SIZE * X_ENC_SIZE - 1:0] x,
+	output reg [RAM_WIDTH-1:0] res
 );
 	
 	reg is_ram_enabled;
@@ -57,10 +59,13 @@ module Matrix_controller
 	wire [RAM_WIDTH-1:0] bram_data [0:BRAM_COUNT-1];
 	wire [ADDR_SIZE-1:0] got_addrs [0:LUTS_PER_CLOCK-1];
 	wire [BRAM_COUNT_SIZE-1:0] got_numbers [0:LUTS_PER_CLOCK-1];
+	reg [BRAM_COUNT_SIZE-1:0] p_got_numbers [0:LUTS_PER_CLOCK-1];
 	
+	reg [1:0] state;
 	reg [J_SIZE-1:0] j;
 //	reg [I_SIZE-1:0] i;
 	reg i;
+	reg ready;
 	
 	wire [X_ENC_SIZE-1:0] x_enc;
 	
@@ -77,11 +82,9 @@ module Matrix_controller
 	
 	integer init_addr_i;
 	initial begin
-		is_ram_enabled = 0;
-//		for(init_addr_i = 0; init_addr_i < LUTS_PER_CLOCK; init_addr_i = init_addr_i + 1) begin
-//			bram_addrs[init_addr_i] = 0;
-//			bram_numbers[init_addr_i] = init_addr_i;
-//		end
+		state <= 1;
+		is_ram_enabled <= 1;
+		j <= 0;
 	end
 
 	
@@ -91,18 +94,39 @@ module Matrix_controller
 			if (LOG)
 				initial
 					#1 $display("Initializing BRAM %d",bram_i);
-			initial
-				bram_addrs[bram_i] = 0;
-			Bram #(
+//			initial
+//				bram_addrs[bram_i] = 0;
+//			Bram #(
+//				.ADDR_SIZE(ADDR_SIZE), // temp for 4x1x8 tests
+//				.RAM_WIDTH(RAM_WIDTH),
+//				.DATA_FILE()
+//			) bram (
+//				clock,
+//				is_ram_enabled,
+//				bram_addrs[bram_i],
+//				bram_data[bram_i]
+//			);
+		end
+		Bram #(
 				.ADDR_SIZE(ADDR_SIZE), // temp for 4x1x8 tests
-				.RAM_WIDTH(RAM_WIDTH)
-			) bram (
+				.RAM_WIDTH(RAM_WIDTH),
+				.DATA_FILE("Data.txt")
+			) bram_0 (
 				clock,
 				is_ram_enabled,
-				bram_addrs[bram_i],
-				bram_data[bram_i]
+				bram_addrs[0],
+				bram_data[0]
 			);
-		end
+			Bram #(
+				.ADDR_SIZE(ADDR_SIZE), // temp for 4x1x8 tests
+				.RAM_WIDTH(RAM_WIDTH),
+				.DATA_FILE("Data_1.txt")
+			) bram_1 (
+				clock,
+				is_ram_enabled,
+				bram_addrs[1],
+				bram_data[1]
+			);
 		for (a_calc_i = 0; a_calc_i < LUTS_PER_CLOCK; a_calc_i = a_calc_i + 1) begin : adress_calcs
 			initial
 					#1 $display("Initializing Address calc %d",a_calc_i);
@@ -125,36 +149,40 @@ module Matrix_controller
 		end
 	endgenerate
 	
-	reg [CLOCKS_COUNT_SIZE-1:0] clock_i;
-	reg [LUTS_PER_CLOCK_SIZE:0] lut_i;
-	
 	always @(posedge clock)
 	begin
-		if(LOG)
-			$display("Started");
-		j = 0;
-		// Wait for x encoded (synced) and data load
-		@(posedge clock)
-		is_ram_enabled <= 0;
-		for(clock_i = 0; clock_i < CLOCKS_COUNT; clock_i = clock_i + 1) begin
-			@(posedge clock);
-			// Display x_enc without additional waiting
-			if (LOG && clock_i == 0)
-				$display("X_enc: %b", x_enc);
+	case(state)
+		0 : // - wait, write to res last item
 
+			begin
 			if(LOG)
-				#1 $display("Loading lut values ", clock_i);
-			/*	
-			for(lut_i = 0; lut_i < LUTS_PER_CLOCK; lut_i = lut_i + 1) begin
-				bram_addrs[got_numbers[lut_i]] <= got_addrs[lut_i];
+				$display("Finished");
+//			assign res = bram_data[p_got_numbers[0]];
+			res <= bram_data[p_got_numbers[0]];
 			end
-			*/
+		1 : //encode x 
+			begin
+			if (j == 0 && LOG)
+				$display("x: %b", x_enc);
+			state <= 2;
+			end
+		2 : // calc part from luts
+			begin
+			if (LOG)
+				$display("for j = %d got BRAM %d at addr %d" , j , got_numbers[0] , got_addrs[0]);			
+
 			bram_addrs[got_numbers[0]] <= got_addrs[0];
-			j = j + 1;
-			is_ram_enabled <= 1;
-		end
-		@(posedge clock);
-		is_ram_enabled <= 0;
+			p_got_numbers[0] <= got_numbers[0];
+//			assign res = bram_data[got_numbers[0]];
+			res <= bram_data[got_numbers[0]];
+			if (j == J_MAX ) begin
+				state <= 0;
+			end else begin
+				state <= 2;
+			end
+			j <= j + 1;
+			end
+		endcase	
 	end
 
 endmodule

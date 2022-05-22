@@ -29,7 +29,7 @@ module Float_comparator
 	output reg is_higher
 );
 	
-	always @ (posedge clock)
+	always @ (a)
 	begin
 		if (a[C_SIZE+E_SIZE] != b[C_SIZE+E_SIZE]) begin
 			is_higher <= a[C_SIZE+E_SIZE] < b[C_SIZE+E_SIZE];

@@ -34,18 +34,20 @@ module Address_calc#(
 	output reg [BRAM_ADDRESS_SIZE-1:0] bram_address
 
 );
-	 
-	always @(posedge clock)
-	begin
-//	if(I_SIZE > 0) begin
-//		bram_number[I_SIZE-1:0] <= i;
-//		bram_number[BRAM_NUMBER_SIZE-1:I_SIZE-1] <= j[BRAM_NUMBER_SIZE-I_SIZE-1:0];
-//	end else begin
-		bram_number <= j[BRAM_NUMBER_SIZE-1:0];
-//	end
 	
-	bram_address[BRAM_ADDRESS_SIZE-1:BRAM_ADDRESS_SIZE-BRAM_NUMBER_SIZE+I_SIZE-1] = j[J_SIZE-1:J_SIZE-BRAM_NUMBER_SIZE+I_SIZE-1];
-	bram_address[X_SIZE+DTYPE_BYTES_SIZE-1:DTYPE_BYTES_SIZE-1] = x_enc;
+	parameter USED_J_BITS = BRAM_ADDRESS_SIZE - X_SIZE;
+	 
+	always @(i or j or x_enc)
+	begin
+	if(I_SIZE > 0) begin
+		bram_number[I_SIZE-1:0] <= i;
+		bram_number[BRAM_NUMBER_SIZE-1:I_SIZE] <= j[BRAM_NUMBER_SIZE-I_SIZE-1:0];
+	end else begin
+		bram_number <= j[BRAM_NUMBER_SIZE-1:0];
+	end
+	
+	bram_address[BRAM_ADDRESS_SIZE-1-:USED_J_BITS] <= j[J_SIZE-1-:USED_J_BITS];
+	bram_address[X_SIZE-1:0] <= x_enc;
 	
 	end
 
